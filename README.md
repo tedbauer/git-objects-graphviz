@@ -11,3 +11,5 @@ $ ./generategenerate-graphviz.sh
 Graphviz output generated in git_graph.dot
 $ dot -Tpng git_graph.dot > output.png
 ```
+
+Check out the [blog post](https://polarbeardomestication.net/posts/notes3.html) for more details!
