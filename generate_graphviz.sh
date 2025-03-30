@@ -17,10 +17,17 @@ get_parent_commits() {
   echo "$commit_data" | grep "^parent" | cut -d' ' -f2
 }
 
-# Function to get all objects (commits, trees, blobs)
+# Modified function to get ALL objects including dangling ones
 get_all_objects() {
-  local objects=$(git rev-list --all --objects 2>/dev/null)
-  echo "$objects"
+  # Get objects reachable from refs
+  local reachable_objects=$(git rev-list --all --objects 2>/dev/null)
+  
+  # Get ALL objects including unreachable ones
+  local all_objects=$(git fsck --unreachable --dangling --no-reflogs 2>/dev/null | grep -E "^(dangling|unreachable)" | awk '{print $3}')
+  
+  # Combine both lists
+  echo "$reachable_objects"
+  echo "$all_objects"
 }
 
 # Function to make ref names graphviz-safe
@@ -87,12 +94,30 @@ generate_graphviz() {
   all_objects=$(get_all_objects)
 
   # Process all objects and write to temporary files
-  for object_hash in $all_objects; do
+  echo "$all_objects" | while read -r object_line; do
+    # Extract hash from the line (handling both rev-list and fsck output formats)
+    local object_hash=$(echo "$object_line" | awk '{print $1}')
+    
+    # Skip if the line starts with "dangling" or "unreachable"
+    if [[ "$object_line" =~ ^(dangling|unreachable) ]]; then
+      object_hash=$(echo "$object_line" | awk '{print $3}')
+    fi
+    
+    # Skip empty lines
+    if [[ -z "$object_hash" ]]; then
+      continue
+    fi
+    
     local object_type=$(get_object_type "$object_hash")
 
     case "$object_type" in
       commit)
-        echo "    \"$object_hash\" [label=\"Commit: $object_hash\", shape=box, style=filled, fillcolor=\"lightblue\", color=\"lightblue\"];" >> "$commits_file"
+        # Add special formatting for dangling commits
+        if [[ "$object_line" =~ ^(dangling|unreachable) ]]; then
+          echo "    \"$object_hash\" [label=\"Dangling Commit: $object_hash\", shape=box, style=filled, fillcolor=\"yellow\", color=\"red\", penwidth=2];" >> "$commits_file"
+        else
+          echo "    \"$object_hash\" [label=\"Commit: $object_hash\", shape=box, style=filled, fillcolor=\"lightblue\", color=\"lightblue\"];" >> "$commits_file"
+        fi
         echo "\"$object_hash\"" >> "$commit_list_file"
         process_commit "$object_hash" "$edges_file"
         ;;
